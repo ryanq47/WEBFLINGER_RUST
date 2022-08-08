@@ -1,6 +1,9 @@
 // website: https://www.fpcomplete.com/blog/http-status-codes-async-rust/
 // MUUUUUCh faster than python so far
 
+//install req: 
+// sudo apt-get install pkg-config libssl-dev
+
 //building for windows
 // rustup target add x86_64-pc-windows-gnu
 // rustup toolchain install stable-x86_64-pc-windows-gnu
@@ -21,6 +24,19 @@
 use std::io::BufRead;
 use colored::Colorize;
 use std::thread;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    ///Wordlist to crack against
+    #[clap(short, long, value_parser)]
+    wordlist: String,
+
+    ///URL to target
+    #[clap(short, long, value_parser)]
+    url: String,
+}
 
 fn main() {
     startup_message();
@@ -39,8 +55,10 @@ WebFlinger Rust! A Directory Bruteforcer
 
 // We'll return _some_ kind of an error
 fn init_function() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
     // Open the file for input
-    let file = std::fs::File::open("file")?;
+    let file = std::fs::File::open(args.wordlist)?;
     // Make a buffered version so we can read lines
     let buffile = std::io::BufReader::new(file);
 
@@ -56,10 +74,16 @@ fn init_function() -> Result<(), Box<dyn std::error::Error>> {
 
         // Make a request and send it, getting a response
         
-        let full_url =  format!("{}{}", "http://127.0.0.1/", line); 
+        let full_url =  format!("http://{}/{}", args.url, line); 
 
         //println!("{:?}", full_url); //<-- prints full url TROUBLESHOOTING
 
+        //bad character handling
+        if full_url.contains("#") {
+            println!("{}", "= = = = = = = = = = = = = = = = = = = = ".red());
+            println!("Found bad character in '{}', skipping", full_url);
+            continue;
+        }
 
 
         //getting response + sending request at same time
@@ -92,8 +116,9 @@ fn init_function() -> Result<(), Box<dyn std::error::Error>> {
 // This was a pain to get right, Doc here: https://users.rust-lang.org/t/convert-box-dyn-error-to-box-dyn-error-send/48856
 fn recursive(url: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     //println!("RECURSIVE {}", url);
+    let args = Args::parse();
 
-    let rec_file = std::fs::File::open("file")?;
+    let rec_file = std::fs::File::open(args.wordlist)?;
     let rec_buffile = std::io::BufReader::new(rec_file);
 
     let rec_client = reqwest::blocking::Client::new();
@@ -101,10 +126,19 @@ fn recursive(url: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>
     let handle = thread::spawn(move || {
         for line in rec_buffile.lines() {
             let line = format!("/{}/",line?);
+            if line.contains("///") {
+                println!("multiple ///");
+            }
+
             //println!("DEBUG LINE {}", line);
             let full_url =  format!("{}{}", url, line);  
             //println!("URL2 {}", full_url);
             //println!("{:?}", full_url); <-- prints full url TROUBLESHOOTING
+
+            //Bad Character Handling
+            if full_url.contains("#") {
+                continue;
+            }
 
             //getting response + sending request at same time
             let resp = rec_client.get(&full_url).send()?;
@@ -137,7 +171,7 @@ fn term_output(full_url: String, resp: reqwest::blocking::Response) {
     //println!("\x1b[5;1H");
     //println!("{}", full_url);
     if resp.status().as_str() == "200"{
-        
+        println!("{}", "= = = = = = = = = = = = = = = = = = = = ".blue());
         println!("{}, Response Code: {}", full_url, resp.status().as_u16()); //<- printing URL + response
         println!("{}", "= = = = = = = = = = = = = = = = = = = = ".blue());
         //let temp_full_url = full_url.clone();
@@ -148,7 +182,7 @@ fn term_output(full_url: String, resp: reqwest::blocking::Response) {
     }
     else if resp.status().as_str() == "500"{
         println!("{}, Response Code: {} <-- Internal Server Error!! Check this out", full_url, resp.status().as_u16()); //<- printing URL + response
-        println!("{}", "= = = = = = = = = = = = = = = = = = = = ".red());
+        println!("{}", "= = = = = = = = = = = = = = = = = = = = ".green().bold());
     }
 
     else {
